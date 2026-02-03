@@ -311,36 +311,6 @@ export async function validateQrToken(
     throw new Error("TOKEN_INVALID");
   }
 
-  // Token already used
-  if (qrToken.usedAt) {
-    const [accessLog] = await db
-      .insert(accessLogs)
-      .values({
-        memberId: qrToken.memberId,
-        method: "qr",
-        allowed: false,
-        reason: "Token QR ya utilizado",
-        qrTokenId: qrToken.id,
-        verifiedBy,
-        accessedAt: new Date(),
-      })
-      .returning();
-
-    return {
-      accessLog,
-      validation: {
-        allowed: false,
-        reason: "Token QR ya utilizado",
-        member: {
-          id: qrToken.member.id,
-          firstName: qrToken.member.firstName,
-          lastName: qrToken.member.lastName,
-          email: qrToken.member.email,
-        },
-      },
-    };
-  }
-
   // Token expired
   if (new Date() > qrToken.expiresAt) {
     const [accessLog] = await db
@@ -371,11 +341,43 @@ export async function validateQrToken(
     };
   }
 
-  // Mark token as used
-  await db
+  // Atomically mark token as used (prevents race condition)
+  // Only updates if usedAt is NULL, returns the updated row
+  const [updatedToken] = await db
     .update(qrTokens)
     .set({ usedAt: new Date() })
-    .where(eq(qrTokens.id, qrToken.id));
+    .where(and(eq(qrTokens.id, qrToken.id), sql`${qrTokens.usedAt} IS NULL`))
+    .returning();
+
+  // If no row was updated, token was already used by another request
+  if (!updatedToken) {
+    const [accessLog] = await db
+      .insert(accessLogs)
+      .values({
+        memberId: qrToken.memberId,
+        method: "qr",
+        allowed: false,
+        reason: "Token QR ya utilizado",
+        qrTokenId: qrToken.id,
+        verifiedBy,
+        accessedAt: new Date(),
+      })
+      .returning();
+
+    return {
+      accessLog,
+      validation: {
+        allowed: false,
+        reason: "Token QR ya utilizado",
+        member: {
+          id: qrToken.member.id,
+          firstName: qrToken.member.firstName,
+          lastName: qrToken.member.lastName,
+          email: qrToken.member.email,
+        },
+      },
+    };
+  }
 
   // Validate member access
   const validation = await validateMemberAccess(qrToken.memberId);
