@@ -14,7 +14,7 @@ import {
   getTodayAccessStats,
 } from "~/lib/services/access.service.server";
 import { getMembers } from "~/lib/services/member.service.server";
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense, useCallback } from "react";
 
 // Lazy load the QR scanner (client-side only)
 const QrScanner = lazy(() => import("~/components/QrScanner"));
@@ -141,6 +141,56 @@ export default function AccessPage() {
 
   // Get the latest result (from form submit or fetcher)
   const currentResult = fetcher.data || actionData;
+
+  // Sound functions using Web Audio API
+  const playBeep = useCallback((frequency: number, duration: number, type: OscillatorType = "sine") => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = frequency;
+      oscillator.type = type;
+      gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + duration);
+    } catch (e) {
+      console.error("Error playing sound:", e);
+    }
+  }, []);
+
+  const playSuccessSound = useCallback(() => {
+    // Two ascending tones for success
+    playBeep(800, 0.15);
+    setTimeout(() => playBeep(1200, 0.2), 150);
+  }, [playBeep]);
+
+  const playErrorSound = useCallback(() => {
+    // Low buzzer sound for error
+    playBeep(300, 0.3, "square");
+    setTimeout(() => playBeep(200, 0.4, "square"), 200);
+  }, [playBeep]);
+
+  // Play sound when result arrives
+  const lastResultRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (currentResult?.result) {
+      const resultKey = JSON.stringify(currentResult.result);
+      if (lastResultRef.current !== resultKey) {
+        lastResultRef.current = resultKey;
+        if (currentResult.result.allowed) {
+          playSuccessSound();
+        } else {
+          playErrorSound();
+        }
+      }
+    }
+  }, [currentResult, playSuccessSound, playErrorSound]);
 
   // Filter members by search
   const filteredMembers = members.filter((m) => {
