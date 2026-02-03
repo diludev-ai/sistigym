@@ -51,17 +51,37 @@ export function QrScanner({ onScan, isProcessing = false }: QrScannerProps) {
       html5QrCodeRef.current = html5QrCode;
 
       const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
+        fps: 15,
+        qrbox: { width: 300, height: 300 },
         aspectRatio: 1,
+        formatsToSupport: [0], // 0 = QR_CODE only for faster detection
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
       };
 
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        config,
-        handleScan,
-        () => {} // Error callback (ignore)
-      );
+      // Try environment camera first, fallback to any camera
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          handleScan,
+          () => {} // Scan error callback (ignore - called when no QR found)
+        );
+      } catch (envError) {
+        // Fallback: try any available camera
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          await html5QrCode.start(
+            devices[0].id,
+            config,
+            handleScan,
+            () => {}
+          );
+        } else {
+          throw new Error("No cameras found");
+        }
+      }
 
       setHasPermission(true);
     } catch (err: any) {
