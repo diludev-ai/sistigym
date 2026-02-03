@@ -1,0 +1,1 @@
+ALTER TABLE "memberships" ADD COLUMN "total_amount" numeric(10, 2);

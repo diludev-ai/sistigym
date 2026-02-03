@@ -1,87 +1,132 @@
-# Welcome to React Router!
+# SistiGym - Sistema de Gestion para Gimnasios
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Sistema completo para la gestion de gimnasios con control de acceso QR, membresias, pagos y PWA para clientes.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## Caracteristicas
 
-## Features
+### Panel Administrativo (/admin)
+- Dashboard con metricas en tiempo real
+- Gestion de miembros (CRUD completo)
+- Gestion de planes y membresias
+- Control de acceso (QR + manual)
+- Registro de pagos
+- Reportes y estadisticas
+- Deteccion de morosidad
+- Configuracion del gimnasio
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+### PWA para Clientes (/app)
+- Login seguro
+- Perfil con estado de membresia
+- Generacion de codigo QR dinamico
+- Historial de accesos y pagos
+- Instalable como app nativa
 
-## Getting Started
+## Stack Tecnologico
 
-### Installation
+- **Frontend**: React Router v7 (full-stack)
+- **Styling**: Tailwind CSS v4
+- **Base de Datos**: PostgreSQL
+- **ORM**: Drizzle ORM
+- **Validacion**: Zod
+- **Autenticacion**: Cookies httpOnly + bcrypt
+- **QR**: qrcode + html5-qrcode
 
-Install the dependencies:
+## Inicio Rapido
 
-```bash
-npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
-npm run dev
-```
-
-Your application will be available at `http://localhost:5173`.
-
-## Building for Production
-
-Create a production build:
+### Con Docker
 
 ```bash
-npm run build
+# Clona el repositorio
+git clone <url>
+cd sistigym
+
+# Levanta con Docker Compose
+docker-compose up -d
+
+# Ejecuta migraciones
+docker-compose exec app pnpm db:migrate
+docker-compose exec app pnpm db:seed
 ```
 
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
+### Sin Docker
 
 ```bash
-docker build -t my-app .
+# Instala dependencias
+pnpm install
 
-# Run the container
-docker run -p 3000:3000 my-app
+# Configura variables de entorno
+cp .env.example .env
+# Edita .env con tu configuracion
+
+# Ejecuta migraciones
+pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+
+# Inicia el servidor de desarrollo
+pnpm dev
 ```
 
-The containerized application can be deployed to any platform that supports Docker, including:
+## Credenciales por Defecto
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
+**Admin:**
+- URL: http://localhost:5173/admin/login
+- Email: admin@gym.com
+- Password: admin123
 
-### DIY Deployment
+**Recepcion:**
+- Email: recepcion@gym.com
+- Password: recepcion123
 
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
+## Documentacion
 
-Make sure to deploy the output of `npm run build`
+- [Guia de Instalacion](docs/INSTALL.md)
+- [Guia de Despliegue](docs/DEPLOY.md)
+- [Guia de Configuracion](docs/CONFIG.md)
+- [Guia de Administracion](docs/ADMIN_GUIDE.md)
+
+## Estructura del Proyecto
 
 ```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
+sistigym/
+├── app/
+│   ├── components/       # Componentes reutilizables
+│   ├── lib/             # Utilidades y servicios
+│   │   ├── services/    # Logica de negocio (.server.ts)
+│   │   └── validations.ts
+│   └── routes/
+│       ├── admin/       # Rutas del panel admin
+│       └── app/         # Rutas de la PWA
+├── db/
+│   ├── schema.ts        # Schema de Drizzle
+│   └── seed.ts          # Datos iniciales
+├── public/
+│   ├── icons/           # Iconos PWA
+│   ├── manifest.json    # Manifest PWA
+│   └── sw.js           # Service Worker
+└── docs/               # Documentacion
 ```
 
-## Styling
+## Scripts Disponibles
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
+```bash
+pnpm dev          # Servidor de desarrollo
+pnpm build        # Build de produccion
+pnpm start        # Iniciar en produccion
+pnpm typecheck    # Verificar tipos TypeScript
+pnpm db:generate  # Generar migraciones
+pnpm db:migrate   # Ejecutar migraciones
+pnpm db:seed      # Cargar datos iniciales
+pnpm db:studio    # Abrir Drizzle Studio
+```
 
----
+## Seguridad
 
-Built with ❤️ using React Router.
+- Passwords hasheados con bcrypt (12 rounds)
+- Sesiones con cookies httpOnly, secure, sameSite
+- Tokens QR con hash SHA256, expiracion corta, un solo uso
+- Validacion de entrada con Zod
+
+## Licencia
+
+MIT

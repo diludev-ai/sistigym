@@ -1,7 +1,22 @@
 .DS_Store
 .env
+.env.local
 /node_modules/
 
 # React Router
 /.react-router/
 /build/
+
+# Claude
+/.claude/
+
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
