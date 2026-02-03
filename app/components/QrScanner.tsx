@@ -36,6 +36,13 @@ export function QrScanner({ onScan, isProcessing = false }: QrScannerProps) {
   const startScanner = useCallback(async () => {
     if (!scannerRef.current || html5QrCodeRef.current) return;
 
+    // Set scanning true first so the div renders
+    setIsScanning(true);
+    setError(null);
+
+    // Wait for next render cycle
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     try {
       // Dynamic import for html5-qrcode (client-side only)
       const { Html5Qrcode } = await import("html5-qrcode");
@@ -56,11 +63,10 @@ export function QrScanner({ onScan, isProcessing = false }: QrScannerProps) {
         () => {} // Error callback (ignore)
       );
 
-      setIsScanning(true);
       setHasPermission(true);
-      setError(null);
     } catch (err: any) {
       console.error("Error starting scanner:", err);
+      setIsScanning(false);
       setHasPermission(false);
 
       if (err.message?.includes("Permission")) {
@@ -68,7 +74,7 @@ export function QrScanner({ onScan, isProcessing = false }: QrScannerProps) {
       } else if (err.message?.includes("NotFound")) {
         setError("No se encontro una camara disponible");
       } else {
-        setError("Error al iniciar el escaner de QR");
+        setError("Error al iniciar el escaner de QR: " + (err.message || "Error desconocido"));
       }
     }
   }, [handleScan]);
