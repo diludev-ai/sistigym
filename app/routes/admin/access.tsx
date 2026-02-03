@@ -49,8 +49,26 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  if (intent === "check-recent-access") {
+    const memberId = formData.get("memberId") as string;
+    if (!memberId) {
+      return { hasRecentAccess: false, minutesAgo: 0 };
+    }
+
+    // Check if member entered recently (last 10 minutes)
+    const { checkRecentAccess } = await import("~/lib/services/access.service.server");
+    const recentAccess = await checkRecentAccess(memberId, 10);
+
+    return {
+      hasRecentAccess: !!recentAccess,
+      minutesAgo: recentAccess ? Math.floor((Date.now() - new Date(recentAccess.accessedAt).getTime()) / 60000) : 0,
+      memberName: recentAccess ? `${recentAccess.member.firstName} ${recentAccess.member.lastName}` : null,
+    };
+  }
+
   if (intent === "manual-checkin") {
     const memberId = formData.get("memberId") as string;
+    const forceEntry = formData.get("force") === "true";
 
     if (!memberId) {
       return {
@@ -61,7 +79,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     try {
-      const { validation } = await registerManualAccess(memberId, staff.id);
+      const { validation } = await registerManualAccess(memberId, staff.id, forceEntry);
       return {
         success: true,
         result: validation,
@@ -135,13 +153,34 @@ export default function AccessPage() {
   const [qrInput, setQrInput] = useState("");
   const [scanMode, setScanMode] = useState<"input" | "camera">("input");
   const [showResultPopup, setShowResultPopup] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmData, setConfirmData] = useState<{ memberName: string; minutesAgo: number } | null>(null);
   const qrInputRef = useRef<HTMLInputElement>(null);
+  const checkAccessFetcher = useFetcher();
+  const manualCheckinFetcher = useFetcher<typeof action>();
 
   const isSubmitting = navigation.state === "submitting";
   const isFetcherSubmitting = fetcher.state === "submitting";
 
   // Get the latest result (from form submit or fetcher)
-  const currentResult = fetcher.data || actionData;
+  const currentResult = manualCheckinFetcher.data || fetcher.data || actionData;
+
+  // Handle check-recent-access response
+  useEffect(() => {
+    if (checkAccessFetcher.data && checkAccessFetcher.state === "idle") {
+      const data = checkAccessFetcher.data as { hasRecentAccess: boolean; minutesAgo: number; memberName: string | null };
+      if (data.hasRecentAccess) {
+        setConfirmData({ memberName: data.memberName || "Usuario", minutesAgo: data.minutesAgo });
+        setShowConfirmModal(true);
+      } else {
+        // No recent access, proceed with check-in
+        const formData = new FormData();
+        formData.set("intent", "manual-checkin");
+        formData.set("memberId", selectedMemberId);
+        manualCheckinFetcher.submit(formData, { method: "post" });
+      }
+    }
+  }, [checkAccessFetcher.data, checkAccessFetcher.state]);
 
   // Sound functions using Web Audio API
   const playBeep = useCallback((frequency: number, duration: number, type: OscillatorType = "sine") => {
@@ -459,69 +498,72 @@ export default function AccessPage() {
               Check-in Manual
             </h2>
 
-            <Form method="post">
-              <input type="hidden" name="intent" value="manual-checkin" />
-              <div className="space-y-4">
-                <div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar miembro..."
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="max-h-48 overflow-y-auto space-y-2">
-                  {filteredMembers.slice(0, 10).map((member) => (
-                    <label
-                      key={member.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
-                        selectedMemberId === member.id
-                          ? "bg-blue-600"
-                          : "bg-gray-700 hover:bg-gray-600"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="memberId"
-                        value={member.id}
-                        checked={selectedMemberId === member.id}
-                        onChange={(e) => setSelectedMemberId(e.target.value)}
-                        className="sr-only"
-                      />
-                      <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-medium text-white">
-                          {member.firstName.charAt(0)}
-                          {member.lastName.charAt(0)}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium truncate">
-                          {member.firstName} {member.lastName}
-                        </p>
-                        <p className="text-gray-400 text-sm truncate">
-                          {member.email}
-                        </p>
-                      </div>
-                    </label>
-                  ))}
-                  {filteredMembers.length === 0 && (
-                    <p className="text-gray-400 text-center py-4">
-                      No se encontraron miembros
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !selectedMemberId}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-medium rounded-lg transition"
-                >
-                  {isSubmitting ? "Registrando..." : "Registrar Entrada"}
-                </button>
+            <div className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar miembro..."
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
-            </Form>
+
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {filteredMembers.slice(0, 10).map((member) => (
+                  <label
+                    key={member.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                      selectedMemberId === member.id
+                        ? "bg-blue-600"
+                        : "bg-gray-700 hover:bg-gray-600"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="memberId"
+                      value={member.id}
+                      checked={selectedMemberId === member.id}
+                      onChange={(e) => setSelectedMemberId(e.target.value)}
+                      className="sr-only"
+                    />
+                    <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm font-medium text-white">
+                        {member.firstName.charAt(0)}
+                        {member.lastName.charAt(0)}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium truncate">
+                        {member.firstName} {member.lastName}
+                      </p>
+                      <p className="text-gray-400 text-sm truncate">
+                        {member.email}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+                {filteredMembers.length === 0 && (
+                  <p className="text-gray-400 text-center py-4">
+                    No se encontraron miembros
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={checkAccessFetcher.state !== "idle" || manualCheckinFetcher.state !== "idle" || !selectedMemberId}
+                onClick={() => {
+                  const formData = new FormData();
+                  formData.set("intent", "check-recent-access");
+                  formData.set("memberId", selectedMemberId);
+                  checkAccessFetcher.submit(formData, { method: "post" });
+                }}
+                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-medium rounded-lg transition"
+              >
+                {checkAccessFetcher.state !== "idle" || manualCheckinFetcher.state !== "idle" ? "Registrando..." : "Registrar Entrada"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -611,6 +653,58 @@ export default function AccessPage() {
 
       {/* Result Popup */}
       {renderResultPopup()}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && confirmData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 mx-auto bg-yellow-500/20 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">
+                Usuario ya ingresó
+              </h3>
+              <p className="text-gray-300">
+                <span className="font-semibold text-white">{confirmData.memberName}</span> ya ingresó hace{" "}
+                <span className="font-semibold text-yellow-400">{confirmData.minutesAgo} minuto{confirmData.minutesAgo !== 1 ? "s" : ""}</span>
+              </p>
+              <p className="text-gray-400 mt-2">
+                ¿Desea registrar otra entrada de todos modos?
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setConfirmData(null);
+                }}
+                className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setConfirmData(null);
+                  // Force entry
+                  const formData = new FormData();
+                  formData.set("intent", "manual-checkin");
+                  formData.set("memberId", selectedMemberId);
+                  formData.set("force", "true");
+                  manualCheckinFetcher.submit(formData, { method: "post" });
+                }}
+                className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition"
+              >
+                Sí, registrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

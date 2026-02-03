@@ -227,13 +227,78 @@ export async function validateMemberAccess(
 }
 
 // ============================================
+// CHECK RECENT ACCESS
+// ============================================
+
+export async function checkRecentAccess(memberId: string, minutes: number = 10) {
+  const cutoff = new Date();
+  cutoff.setMinutes(cutoff.getMinutes() - minutes);
+
+  return db.query.accessLogs.findFirst({
+    where: and(
+      eq(accessLogs.memberId, memberId),
+      eq(accessLogs.allowed, true),
+      gte(accessLogs.accessedAt, cutoff)
+    ),
+    with: {
+      member: {
+        columns: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+    orderBy: [desc(accessLogs.accessedAt)],
+  });
+}
+
+// ============================================
 // REGISTER ACCESS (manual check-in)
 // ============================================
 
 export async function registerManualAccess(
   memberId: string,
-  verifiedBy: string
+  verifiedBy: string,
+  forceEntry: boolean = false
 ): Promise<{ accessLog: AccessLog; validation: AccessValidationResult }> {
+  // Check recent access unless forced
+  if (!forceEntry) {
+    const recentAccess = await checkRecentAccess(memberId, 10);
+    if (recentAccess) {
+      const minutesAgo = Math.floor((Date.now() - new Date(recentAccess.accessedAt).getTime()) / 60000);
+
+      const member = await db.query.members.findFirst({
+        where: eq(members.id, memberId),
+      });
+
+      const [accessLog] = await db
+        .insert(accessLogs)
+        .values({
+          memberId,
+          method: "manual",
+          allowed: false,
+          reason: `Ya ingresó hace ${minutesAgo} minuto${minutesAgo !== 1 ? "s" : ""}`,
+          verifiedBy,
+          accessedAt: new Date(),
+        })
+        .returning();
+
+      return {
+        accessLog,
+        validation: {
+          allowed: false,
+          reason: `Ya ingresó hace ${minutesAgo} minuto${minutesAgo !== 1 ? "s" : ""}`,
+          member: member ? {
+            id: member.id,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            email: member.email,
+          } : undefined,
+        },
+      };
+    }
+  }
+
   const validation = await validateMemberAccess(memberId);
 
   const [accessLog] = await db
