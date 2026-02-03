@@ -7,6 +7,8 @@ import {
 } from "@react-router/dev/routes";
 
 export default [
+  // Redirect root to app
+  index("routes/index.tsx"),
 
   // Admin routes (with layout protection)
   route("admin/login", "routes/admin/login.tsx"),
