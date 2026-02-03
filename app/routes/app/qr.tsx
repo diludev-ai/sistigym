@@ -157,12 +157,15 @@ export default function ClientQR() {
     return () => clearInterval(interval);
   }, [currentQrData?.expiresAt, calculateSecondsRemaining]);
 
-  // Auto-refresh when expired
+  // Auto-refresh when expired (with debounce to prevent loops)
   useEffect(() => {
     if (isExpired && loaderData.canGenerateQr && fetcher.state === "idle") {
-      fetcher.submit({}, { method: "post" });
+      const timer = setTimeout(() => {
+        fetcher.submit({}, { method: "post" });
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [isExpired, loaderData.canGenerateQr, fetcher]);
+  }, [isExpired, loaderData.canGenerateQr, fetcher.state]);
 
   const handleManualRefresh = () => {
     if (fetcher.state === "idle") {
