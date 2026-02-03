@@ -130,7 +130,7 @@ export default function ClientLayout() {
               <p className="text-gray-400 text-xs">{member.email}</p>
             </div>
           </div>
-          <Form method="post">
+          <Form method="post" action="/app/me">
             <input type="hidden" name="intent" value="logout" />
             <button
               type="submit"

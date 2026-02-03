@@ -1,6 +1,6 @@
-import { useLoaderData } from "react-router";
+import { useLoaderData, redirect } from "react-router";
 import type { Route } from "./+types/me";
-import { requireMemberAuth } from "~/lib/session-member.server";
+import { requireMemberAuth, memberSessionCookie } from "~/lib/session-member.server";
 import {
   getActiveMembershipForMember,
   checkMemberOverdue,
@@ -26,6 +26,25 @@ export async function loader({ request }: Route.LoaderArgs) {
     overdueStatus,
     recentAccess,
   };
+}
+
+// ============================================
+// ACTION
+// ============================================
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent === "logout") {
+    return redirect("/app/login", {
+      headers: {
+        "Set-Cookie": await memberSessionCookie.serialize("", { maxAge: 0 }),
+      },
+    });
+  }
+
+  return null;
 }
 
 // ============================================
