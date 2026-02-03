@@ -134,6 +134,7 @@ export default function AccessPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [qrInput, setQrInput] = useState("");
   const [scanMode, setScanMode] = useState<"input" | "camera">("input");
+  const [showResultPopup, setShowResultPopup] = useState(false);
   const qrInputRef = useRef<HTMLInputElement>(null);
 
   const isSubmitting = navigation.state === "submitting";
@@ -209,16 +210,18 @@ export default function AccessPage() {
     }
   }, [scanMode]);
 
-  // Clear result after 5 seconds
+  // Show popup and auto-close after 4 seconds
   useEffect(() => {
     if (currentResult?.result) {
+      setShowResultPopup(true);
       const timer = setTimeout(() => {
+        setShowResultPopup(false);
         setQrInput("");
         setSelectedMemberId("");
         if (scanMode === "input") {
           qrInputRef.current?.focus();
         }
-      }, 5000);
+      }, 4000);
       return () => clearTimeout(timer);
     }
   }, [currentResult, scanMode]);
@@ -233,96 +236,107 @@ export default function AccessPage() {
     }
   };
 
-  const getResultDisplay = () => {
-    if (!currentResult?.result) return null;
+  const renderResultPopup = () => {
+    if (!showResultPopup || !currentResult?.result) return null;
 
     const { allowed, reason, member, membership, paymentWarning, paymentInfo } = currentResult.result;
 
     return (
       <div
-        className={`rounded-2xl p-8 text-center ${
-          allowed
-            ? "bg-green-500/20 border-2 border-green-500"
-            : "bg-red-500/20 border-2 border-red-500"
-        }`}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        onClick={() => setShowResultPopup(false)}
       >
         <div
-          className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-4 ${
-            allowed ? "bg-green-500" : "bg-red-500"
+          className={`mx-4 w-full max-w-md rounded-3xl p-8 text-center shadow-2xl transform transition-all ${
+            allowed
+              ? "bg-gradient-to-b from-green-900 to-gray-900 border-2 border-green-500"
+              : "bg-gradient-to-b from-red-900 to-gray-900 border-2 border-red-500"
           }`}
+          onClick={(e) => e.stopPropagation()}
         >
-          {allowed ? (
-            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-            </svg>
-          ) : (
-            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          )}
-        </div>
-
-        <h2
-          className={`text-4xl font-bold mb-2 ${
-            allowed ? "text-green-400" : "text-red-400"
-          }`}
-        >
-          {allowed ? "APROBADO" : "DENEGADO"}
-        </h2>
-
-        {member && (
-          <p className="text-2xl text-white mb-2">
-            {member.firstName} {member.lastName}
-          </p>
-        )}
-
-        <p
-          className={`text-lg ${allowed ? "text-green-300" : "text-red-300"}`}
-        >
-          {reason}
-        </p>
-
-        {/* Payment Warning Alert */}
-        {allowed && paymentWarning && (
-          <div className="mt-4 p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
-            <div className="flex items-center justify-center gap-2 text-yellow-400">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          <div
+            className={`w-28 h-28 mx-auto rounded-full flex items-center justify-center mb-6 ${
+              allowed ? "bg-green-500 shadow-lg shadow-green-500/50" : "bg-red-500 shadow-lg shadow-red-500/50"
+            }`}
+          >
+            {allowed ? (
+              <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
               </svg>
-              <span className="font-medium">PAGO PENDIENTE</span>
+            ) : (
+              <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </div>
+
+          <h2
+            className={`text-5xl font-bold mb-3 ${
+              allowed ? "text-green-400" : "text-red-400"
+            }`}
+          >
+            {allowed ? "APROBADO" : "DENEGADO"}
+          </h2>
+
+          {member && (
+            <p className="text-3xl text-white font-semibold mb-2">
+              {member.firstName} {member.lastName}
+            </p>
+          )}
+
+          <p
+            className={`text-xl ${allowed ? "text-green-300" : "text-red-300"}`}
+          >
+            {reason}
+          </p>
+
+          {/* Payment Warning Alert */}
+          {allowed && paymentWarning && (
+            <div className="mt-6 p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-xl">
+              <div className="flex items-center justify-center gap-2 text-yellow-400">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="font-bold text-lg">PAGO PENDIENTE</span>
+              </div>
+              <p className="text-yellow-300 mt-2">{paymentWarning}</p>
             </div>
-            <p className="text-yellow-300 mt-2">{paymentWarning}</p>
-          </div>
-        )}
+          )}
 
-        {/* Payment Info when denied due to payment */}
-        {!allowed && paymentInfo && (
-          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-left">
-            <p className="text-red-300 text-sm">
-              <strong>Total:</strong> ${paymentInfo.totalAmount?.toLocaleString()}
-            </p>
-            <p className="text-red-300 text-sm">
-              <strong>Abonado:</strong> ${paymentInfo.paidAmount?.toLocaleString()}
-            </p>
-            <p className="text-red-300 text-sm">
-              <strong>Pendiente:</strong> ${paymentInfo.pendingAmount?.toLocaleString()}
-            </p>
-          </div>
-        )}
+          {/* Payment Info when denied due to payment */}
+          {!allowed && paymentInfo && (
+            <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <p className="text-red-300">
+                <strong>Total:</strong> ${paymentInfo.totalAmount?.toLocaleString()}
+              </p>
+              <p className="text-red-300">
+                <strong>Abonado:</strong> ${paymentInfo.paidAmount?.toLocaleString()}
+              </p>
+              <p className="text-red-300">
+                <strong>Pendiente:</strong> ${paymentInfo.pendingAmount?.toLocaleString()}
+              </p>
+            </div>
+          )}
 
-        {membership && allowed && (
-          <div className="mt-4 p-4 bg-gray-800 rounded-lg inline-block">
-            <p className="text-gray-400">
-              Plan: <span className="text-white">{membership.planName}</span>
-            </p>
-            <p className="text-gray-400">
-              Dias restantes:{" "}
-              <span className="text-white font-bold">
-                {membership.daysRemaining}
-              </span>
-            </p>
-          </div>
-        )}
+          {membership && allowed && (
+            <div className="mt-6 p-4 bg-gray-800/80 rounded-xl">
+              <p className="text-gray-300 text-lg">
+                Plan: <span className="text-white font-semibold">{membership.planName}</span>
+              </p>
+              <p className="text-gray-300 text-lg">
+                Días restantes:{" "}
+                <span className="text-white font-bold text-2xl">
+                  {membership.daysRemaining}
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* Close hint */}
+          <p className="mt-6 text-gray-500 text-sm">
+            Toca para cerrar o espera 4 segundos
+          </p>
+        </div>
       </div>
     );
   };
@@ -356,9 +370,6 @@ export default function AccessPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left: Check-in Methods */}
         <div className="space-y-6">
-          {/* Result Display */}
-          {currentResult?.result && getResultDisplay()}
-
           {/* QR Scanner Section */}
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -597,6 +608,9 @@ export default function AccessPage() {
           </div>
         </div>
       </div>
+
+      {/* Result Popup */}
+      {renderResultPopup()}
     </div>
   );
 }

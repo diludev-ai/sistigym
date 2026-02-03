@@ -341,6 +341,50 @@ export async function validateQrToken(
     };
   }
 
+  // Check if member already entered recently (prevents QR sharing)
+  const recentAccessMinutes = 10; // Configurable: minutes to wait between entries
+  const recentCutoff = new Date();
+  recentCutoff.setMinutes(recentCutoff.getMinutes() - recentAccessMinutes);
+
+  const recentAccess = await db.query.accessLogs.findFirst({
+    where: and(
+      eq(accessLogs.memberId, qrToken.memberId),
+      eq(accessLogs.allowed, true),
+      gte(accessLogs.accessedAt, recentCutoff)
+    ),
+    orderBy: [desc(accessLogs.accessedAt)],
+  });
+
+  if (recentAccess) {
+    const minutesAgo = Math.floor((Date.now() - new Date(recentAccess.accessedAt).getTime()) / 60000);
+    const [accessLog] = await db
+      .insert(accessLogs)
+      .values({
+        memberId: qrToken.memberId,
+        method: "qr",
+        allowed: false,
+        reason: `Ya ingresó hace ${minutesAgo} minuto${minutesAgo !== 1 ? "s" : ""}`,
+        qrTokenId: qrToken.id,
+        verifiedBy,
+        accessedAt: new Date(),
+      })
+      .returning();
+
+    return {
+      accessLog,
+      validation: {
+        allowed: false,
+        reason: `Ya ingresó hace ${minutesAgo} minuto${minutesAgo !== 1 ? "s" : ""}`,
+        member: {
+          id: qrToken.member.id,
+          firstName: qrToken.member.firstName,
+          lastName: qrToken.member.lastName,
+          email: qrToken.member.email,
+        },
+      },
+    };
+  }
+
   // Atomically mark token as used (prevents race condition)
   // Only updates if usedAt is NULL, returns the updated row
   const [updatedToken] = await db
